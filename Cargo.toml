@@ -1,0 +1,11 @@
+[package]
+name = "keystone"
+version = "0.1.0"
+authors = ["Ta Thanh Dinh <tathanhdinh@gmail.com>"]
+
+build = "build.rs"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "*"

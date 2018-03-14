@@ -16,8 +16,8 @@ fn main() {
     let engine = Keystone::new(KS_ARCH_X86, KS_MODE_32)
         .expect("Could not initialize Keystone engine");
 
-    engine.option(KS_OPT_SYNTAX, KS_OPT_SYNTAX_INTEL)
-        .expect("Could not set option to nasm syntax");
+    engine.option(KS_OPT_SYNTAX, KS_OPT_SYNTAX_NASM)
+        .expect("Could not set option to NASM syntax");
 
     let result = engine.asm("mov ah, 0x80", 0x0)
         .expect("Could not assemble");

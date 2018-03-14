@@ -22,13 +22,6 @@ pub fn arch_supported(arch: gen::ks_arch) -> bool {
     }
 }
 
-// pub fn error_msg(err: gen::ks_err) -> String {
-//     unsafe {
-//         std::ffi::CStr::from_ptr(gen::ks_strerror(err))
-//             .to_string_lossy()
-//             .into_owned()
-//     }
-// }
 #[derive(Debug)]
 pub struct Error {
     pub err: gen::ks_err,
@@ -75,8 +68,8 @@ impl Keystone {
             let mut engine: *mut gen::ks_engine = std::ptr::null_mut();
             let err = unsafe {
                 gen::ks_open(arch, mode, &mut engine)
-            } as gen::ks_err;
-
+            };
+            
             if err == gen::KS_ERR_OK {
                 Ok(Keystone { engine: engine })
             }
@@ -89,7 +82,7 @@ impl Keystone {
     pub fn error(&self) -> Result<(), Error> {
         let err = unsafe {
             gen::ks_errno(self.engine)
-        } as gen::ks_err;
+        };
 
         if err == gen::KS_ERR_OK {
             Ok(())
@@ -102,7 +95,7 @@ impl Keystone {
     pub fn option(&self, type_: gen::ks_opt_type, value: gen::ks_opt_value) -> Result<(), Error> {
         let err = unsafe {
             gen::ks_option(self.engine, type_, value as usize)
-        } as gen::ks_err;
+        };
 
         if err == gen::KS_ERR_OK {
             Ok(())
@@ -170,6 +163,9 @@ mod tests {
 
         let asm_result = engine.asm("push rbx", 0x0).unwrap();
         assert_eq!(asm_result.encoding[..], [0x53]);
+
+        let asm_result = engine.asm("lea rcx, [r12+r9*1-0x01]", 0x0).unwrap();
+        assert_eq!(asm_result.encoding[..], [0x4b, 0x8d, 0x4c, 0x0c, 0xff]);
     }
 
     #[test]
@@ -181,23 +177,8 @@ mod tests {
 
         let asm_result = engine.asm("sysenter", 0x0).unwrap();
         assert_eq!(asm_result.encoding[..], [0x0f, 0x34]);
+
+        let asm_result = engine.asm("repe movsd es:[edi],ds:[esi]", 0x0).unwrap();
+        assert_eq!(asm_result.encoding[..], [0xf3, 0xa5]);
     }
-    
-    // #[test]
-    // fn test_original_sample() {
-    //     let engine = Keystone::new(KS_ARCH_X86, KS_MODE_32)
-    //         .expect("Could not initialize Keystone engine");
-
-    //     engine.option(KS_OPT_SYNTAX, KS_OPT_SYNTAX_INTEL)
-    //         .expect("Could not set option to nasm syntax");
-
-    //     let result = engine.asm("mov ah, 0x80", 0x0)
-    //         .expect("Could not assemble");
-
-    //     println!("ASM result: {}", result);
-
-    //     if let Err(err) = engine.asm("INVALID", 0x0) {
-    //         println!("Error: {}", err);
-    //     }
-    // }
 }

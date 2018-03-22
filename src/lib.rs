@@ -67,9 +67,9 @@ impl Keystone {
         else {
             let mut engine: *mut gen::ks_engine = std::ptr::null_mut();
             let err = unsafe {
-                gen::ks_open(arch, mode, &mut engine)
+                gen::ks_open(arch, mode as std::os::raw::c_int, &mut engine)
             };
-            
+
             if err == gen::KS_ERR_OK {
                 Ok(Keystone { engine: engine })
             }
@@ -112,7 +112,7 @@ impl Keystone {
 
         let s = std::ffi::CString::new(str_).unwrap();
         let err = unsafe {
-            gen::ks_asm(self.engine, s.as_ptr(), address, 
+            gen::ks_asm(self.engine, s.as_ptr(), address,
                         &mut encoding, &mut encoding_size, &mut stat_count)
         } as gen::ks_err;
 
@@ -166,6 +166,9 @@ mod tests {
 
         let asm_result = engine.asm("lea rcx, [r12+r9*1-0x01]", 0x0).unwrap();
         assert_eq!(asm_result.encoding[..], [0x4b, 0x8d, 0x4c, 0x0c, 0xff]);
+
+        let asm_result = engine.asm("lea rbx, dword ptr [r9+rax*1]", 0x0).unwrap();
+        assert_eq!(asm_result.encoding[..], [0x49, 0x8d, 0x1c, 0x01]);
     }
 
     #[test]

@@ -1,27 +1,5 @@
 pub mod gen;
 
-pub fn binding_version() -> (u32, u32) {
-    (gen::KS_API_MAJOR, gen::KS_API_MINOR)
-}
-
-/// Return tuple `(major, minor)` API version numbers.
-pub fn version() -> (u32, u32) {
-    let mut major: std::os::raw::c_uint = 0;
-    let mut minor: std::os::raw::c_uint = 0;
-
-    unsafe {
-        gen::ks_version(&mut major, &mut minor);
-    }
-    (major as u32, minor as u32)
-}
-
-/// Return whether an arch is supported
-pub fn arch_supported(arch: gen::ks_arch) -> bool {
-    unsafe {
-        gen::ks_arch_supported(arch)
-    }
-}
-
 #[derive(Debug)]
 pub struct Error {
     pub err: gen::ks_err,
@@ -29,9 +7,7 @@ pub struct Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let err_msg = unsafe {
-            std::ffi::CStr::from_ptr(gen::ks_strerror(self.err))
-        };
+        let err_msg = unsafe { std::ffi::CStr::from_ptr(gen::ks_strerror(self.err)) };
         write!(f, "{}", err_msg.to_str().unwrap())
     }
 }
@@ -60,21 +36,19 @@ pub struct Keystone {
 
 impl Keystone {
     /// Create new instance of Keystone engine.
-    pub fn new(arch: gen::ks_arch, mode: gen::ks_mode) -> Result<Keystone, Error> {
-        if version() != binding_version() {
+    pub fn new(arch: gen::ks_arch, mode: gen::ks_mode) -> Result<Self, Error> {
+        if Keystone::version() != Keystone::binding_version() {
             Err(Error { err: gen::KS_ERR_VERSION })
-        }
-        else {
+        } else {
             let mut engine: *mut gen::ks_engine = std::ptr::null_mut();
             let err = unsafe {
                 gen::ks_open(arch, mode as std::os::raw::c_int, &mut engine)
             };
 
             if err == gen::KS_ERR_OK {
-                Ok(Keystone { engine: engine })
-            }
-            else {
-                Err(Error { err: err })
+                Ok(Keystone { engine })
+            } else {
+                Err(Error { err })
             }
         }
     }
@@ -86,9 +60,8 @@ impl Keystone {
 
         if err == gen::KS_ERR_OK {
             Ok(())
-        }
-        else {
-            Err(Error { err: err })
+        } else {
+            Err(Error { err })
         }
     }
 
@@ -99,9 +72,8 @@ impl Keystone {
 
         if err == gen::KS_ERR_OK {
             Ok(())
-        }
-        else {
-            Err(Error { err: err })
+        } else {
+            Err(Error { err })
         }
     }
 
@@ -117,35 +89,44 @@ impl Keystone {
         } as gen::ks_err;
 
         if err == gen::KS_ERR_OK {
-            let bytes = unsafe {
-                std::slice::from_raw_parts(encoding, encoding_size)
-            };
+            let bytes = unsafe { std::slice::from_raw_parts(encoding, encoding_size) };
 
             let ok = AsmResult {
                 stat_count: stat_count,
                 encoding: From::from(&bytes[..]), // copy
             };
 
-            unsafe {
-                gen::ks_free(encoding);
-            };
+            unsafe { gen::ks_free(encoding); };
 
             Ok(ok)
+        } else {
+            let err = unsafe { gen::ks_errno(self.engine) };
+            Err(Error { err })
         }
-        else {
-            let err = unsafe {
-                gen::ks_errno(self.engine)
-            };
-            Err(Error { err: err })
-        }
+    }
+
+    pub fn binding_version() -> (u32, u32) {
+        (gen::KS_API_MAJOR, gen::KS_API_MINOR)
+    }
+
+    /// Return tuple `(major, minor)` API version numbers.
+    pub fn version() -> (u32, u32) {
+        let mut major: std::os::raw::c_uint = 0;
+        let mut minor: std::os::raw::c_uint = 0;
+
+        unsafe { gen::ks_version(&mut major, &mut minor); }
+        (major as u32, minor as u32)
+    }
+
+    /// Return whether an arch is supported
+    pub fn arch_supported(arch: gen::ks_arch) -> bool {
+        unsafe { gen::ks_arch_supported(arch) }
     }
 }
 
 impl Drop for Keystone {
     fn drop(&mut self) {
-        unsafe {
-            gen::ks_close(self.engine)
-        };
+        unsafe { gen::ks_close(self.engine) };
     }
 }
 

@@ -1,3 +1,3 @@
-[submodule "keystone-c"]
-	path = keystone-c
+[submodule "keystone-sys/keystone-c"]
+	path = keystone-sys/keystone-c
 	url = https://github.com/keystone-engine/keystone.git

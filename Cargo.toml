@@ -2,10 +2,7 @@
 name = "keystone"
 version = "0.1.0"
 authors = ["Ta Thanh Dinh <tathanhdinh@gmail.com>"]
-
-build = "build.rs"
+description = "High-level bindings for Keystone assembler"
 
 [dependencies]
-
-[build-dependencies]
-bindgen = "*"
+keystone-sys = { path = "keystone-sys" }

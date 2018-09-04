@@ -1,143 +1,173 @@
-pub mod gen;
+extern crate keystone_sys as kss;
 
-#[derive(Debug)]
-pub struct Error {
-    pub err: gen::ks_err,
-}
+mod reexport;
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let err_msg = unsafe { std::ffi::CStr::from_ptr(gen::ks_strerror(self.err)) };
-        write!(f, "{}", err_msg.to_str().unwrap())
+pub use reexport::*;
+use std::{convert::From, error, ffi::CStr, fmt};
+
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use error::Error;
+        write!(f, "{}", self.description())
     }
 }
 
-pub struct AsmResult {
-    pub stat_count: usize,
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        unsafe {
+            CStr::from_ptr(kss::ks_strerror(From::from(*self)))
+                .to_str()
+                .unwrap()
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
+}
+
+pub struct Assembly {
+    pub statement_count: usize,
     pub encoding: Vec<u8>,
 }
 
-impl std::fmt::Display for AsmResult {
+impl std::fmt::Display for Assembly {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let encoding_strs = self.encoding
+        let encoding_strs = self
+            .encoding
             .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<Vec<_>>()
             .join(" ");
-        // try!(f.write_fmt(format_args!("{}", encoding_strs)));
         write!(f, "{}", encoding_strs)
-        // Ok(())
     }
 }
 
 pub struct Keystone {
-    engine: *mut gen::ks_engine,
+    engine: *mut kss::Engine,
 }
 
 impl Keystone {
     /// Create new instance of Keystone engine.
-    pub fn new(arch: gen::ks_arch, mode: gen::ks_mode) -> Result<Self, Error> {
-        if Keystone::version() != Keystone::binding_version() {
-            Err(Error { err: gen::KS_ERR_VERSION })
+    pub fn new(arch: Arch, mode: Mode) -> Result<Self, Error> {
+        let (major, minor, _) = self::version();
+        if (major, minor) != Keystone::binding_version() {
+            Err(Error::Version)
         } else {
-            let mut engine: *mut gen::ks_engine = std::ptr::null_mut();
+            let mut engine: *mut kss::Engine = std::ptr::null_mut();
             let err = unsafe {
-                gen::ks_open(arch, mode as std::os::raw::c_int, &mut engine)
+                kss::ks_open(
+                    From::from(arch),
+                    i32::from(kss::Mode::from(mode)),
+                    &mut engine,
+                )
             };
 
-            if err == gen::KS_ERR_OK {
+            if err == kss::Error::KS_ERR_OK {
                 Ok(Keystone { engine })
             } else {
-                Err(Error { err })
+                Err(From::from(err))
             }
         }
     }
 
     pub fn error(&self) -> Result<(), Error> {
-        let err = unsafe {
-            gen::ks_errno(self.engine)
-        };
+        let err = unsafe { kss::ks_errno(self.engine) };
 
-        if err == gen::KS_ERR_OK {
+        if err == kss::Error::KS_ERR_OK {
             Ok(())
         } else {
-            Err(Error { err })
+            Err(From::from(err))
         }
     }
 
-    pub fn option(&self, type_: gen::ks_opt_type, value: gen::ks_opt_value) -> Result<(), Error> {
+    pub fn option(&self, type_: OptionType, value: OptionValue) -> Result<(), Error> {
         let err = unsafe {
-            gen::ks_option(self.engine, type_, value as usize)
+            kss::ks_option(
+                self.engine,
+                From::from(type_),
+                i32::from(kss::OptionValue::from(value)) as usize,
+            )
         };
 
-        if err == gen::KS_ERR_OK {
+        if err == kss::Error::KS_ERR_OK {
             Ok(())
         } else {
-            Err(Error { err })
+            Err(From::from(err))
         }
     }
 
-    pub fn asm(&self, str_: &str, address: u64) -> Result<AsmResult, Error> {
+    pub fn asm(&self, str_: &str, address: u64) -> Result<Assembly, Error> {
         let mut encoding: *mut std::os::raw::c_uchar = std::ptr::null_mut();
         let mut encoding_size: usize = 0;
         let mut stat_count: usize = 0;
 
         let s = std::ffi::CString::new(str_).unwrap();
-        let err = unsafe {
-            gen::ks_asm(self.engine, s.as_ptr(), address,
-                        &mut encoding, &mut encoding_size, &mut stat_count)
-        } as gen::ks_err;
+        let err = kss::Error::from(unsafe {
+            kss::ks_asm(
+                self.engine,
+                s.as_ptr(),
+                address,
+                &mut encoding,
+                &mut encoding_size,
+                &mut stat_count,
+            )
+        } as u32);
 
-        if err == gen::KS_ERR_OK {
+        if err == kss::Error::KS_ERR_OK {
             let bytes = unsafe { std::slice::from_raw_parts(encoding, encoding_size) };
 
-            let ok = AsmResult {
-                stat_count: stat_count,
+            let ok = Assembly {
+                statement_count: stat_count,
                 encoding: From::from(&bytes[..]), // copy
             };
 
-            unsafe { gen::ks_free(encoding); };
+            unsafe {
+                kss::ks_free(encoding);
+            };
 
             Ok(ok)
         } else {
-            let err = unsafe { gen::ks_errno(self.engine) };
-            Err(Error { err })
+            let err = unsafe { kss::ks_errno(self.engine) };
+            Err(From::from(err))
         }
     }
 
     pub fn binding_version() -> (u32, u32) {
-        (gen::KS_API_MAJOR, gen::KS_API_MINOR)
-    }
-
-    /// Return tuple `(major, minor)` API version numbers.
-    pub fn version() -> (u32, u32) {
-        let mut major: std::os::raw::c_uint = 0;
-        let mut minor: std::os::raw::c_uint = 0;
-
-        unsafe { gen::ks_version(&mut major, &mut minor); }
-        (major as u32, minor as u32)
-    }
-
-    /// Return whether an arch is supported
-    pub fn arch_supported(arch: gen::ks_arch) -> bool {
-        unsafe { gen::ks_arch_supported(arch) }
+        (kss::KS_API_MAJOR, kss::KS_API_MINOR)
     }
 }
 
 impl Drop for Keystone {
     fn drop(&mut self) {
-        unsafe { gen::ks_close(self.engine) };
+        unsafe { kss::ks_close(self.engine) };
     }
+}
+
+/// Return tuple `(major, minor, extra)` API version numbers.
+pub fn version() -> (u32, u32, u32) {
+    let mut major: std::os::raw::c_uint = 0;
+    let mut minor: std::os::raw::c_uint = 0;
+
+    unsafe {
+        kss::ks_version(&mut major, &mut minor);
+    }
+    (major as u32, minor as u32, kss::KS_VERSION_EXTRA)
+}
+
+/// Return whether an arch is supported
+pub fn arch_supported(arch: kss::Arch) -> bool {
+    unsafe { kss::ks_arch_supported(arch) }
 }
 
 #[cfg(test)]
 mod tests {
-    use gen::*;
     use super::*;
 
     #[test]
     fn test_amd64() {
-        let engine = Keystone::new(KS_ARCH_X86, KS_MODE_64).unwrap();
+        let engine = Keystone::new(Arch::X86, Mode::Bit64).unwrap();
 
         let asm_result = engine.asm("add rax, rbx", 0x0).unwrap();
         assert_eq!(asm_result.encoding[..], [0x48, 0x01, 0xd8]);
@@ -154,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_x86() {
-        let engine = Keystone::new(KS_ARCH_X86, KS_MODE_32).unwrap();
+        let engine = Keystone::new(Arch::X86, Mode::Bit32).unwrap();
 
         let asm_result = engine.asm("xor eax, ebx", 0x0).unwrap();
         assert_eq!(asm_result.encoding[..], [0x31, 0xd8]);

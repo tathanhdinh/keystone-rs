@@ -1,0 +1,19 @@
+[package]
+name = "keystone-sys"
+version = "0.1.0"
+authors = ["Ta Thanh Dinh <tathanhdinh@gmail.com>"]
+description = "Low-level bindings for Keystone assembler"
+build = "build.rs"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.40.0"
+cmake = "0.1.33"
+
+[target.'cfg(unix)'.build-dependencies]
+pkg-config = "0.3.14"
+
+[features]
+default = []
+

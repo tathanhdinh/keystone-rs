@@ -1,14 +1,14 @@
-extern crate keystone_sys as kss;
+use keystone_sys as kss;
 
 mod reexport;
 
-pub use reexport::*;
+pub use crate::reexport::*;
 use std::{convert::From, error, ffi::CStr, fmt};
 
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use error::Error;
+        use crate::error::Error;
         write!(f, "{}", self.description())
     }
 }

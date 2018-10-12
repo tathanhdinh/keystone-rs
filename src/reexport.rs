@@ -4,9 +4,9 @@
     non_snake_case
 )]
 
-extern crate keystone_sys as kss;
+use keystone_sys as kss;
 
-use kss::{Arch::*, Error::*, Mode::*, OptionType::*, OptionValue::*};
+use crate::kss::{Arch::*, Error::*, Mode::*, OptionType::*, OptionValue::*};
 use std::{convert, ops};
 
 macro_rules! enum_association_wrapper {
@@ -178,7 +178,7 @@ enum_wrapper!(
     => Bit16 = KS_MODE_16;
 );
 
-use Mode::{Mips32, Mips64, Thumb, V8};
+use self::Mode::{Mips32, Mips64, Thumb, V8};
 enum_association_wrapper!(
     [
         Mode

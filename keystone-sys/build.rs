@@ -1,46 +1,26 @@
-#[cfg(target_os = "linux")]
-extern crate pkg_config;
-
-extern crate bindgen;
-extern crate cmake;
-
 use std::{env, path};
 
 static KEYSTONE_C: &'static str = "keystone-c";
+static KEYSTONE_LIB: &'static str = "keystone";
 
-#[cfg(target_os = "windows")]
-fn build_keystone(out_dir_path: &path::Path) {
-    println!("cargo:rerun-if-changed={}", KEYSTONE_C);
+fn build_keystone() {
+    let mut cmake_config = cmake::Config::new(KEYSTONE_C);
+    cmake_config.define("BUILD_SHARED_LIBS", "OFF")
+        .define("CMAKE_BUILD_TYPE", "Release");
 
-    // manually check if Keystone has been built
-    let keystone_built_dir = out_dir_path.join("lib");
-    if keystone_built_dir.exists() {
-        if keystone_built_dir.join("keystone.dll").exists()
-            && keystone_built_dir.join("keystone.lib").exists()
-        {
-            return;
-        }
-    }
+    #[cfg(target_family = "windows")]
+    cmake_config.generator("NMake Makefiles");
 
-    // build Keystone
-    let ks_builder = cmake::Config::new(KEYSTONE_C)
-        .define("BUILD_SHARED_LIBS", "ON")
-        .generator("NMake Makefiles")
-        .build();
+    #[cfg(target_family = "unix")]
+    cmake_config.generator("Unix Makefiles");
 
-    println!("cargo:rust-link-search=native={}/lib", ks_builder.display());
-    println!("cargo:rustc-link-lib=dylib=keystone");
+    let compiled_ouput_path = cmake_config.build();
+
+    println!("cargo:rustc-link-search={}={}/lib64", "native", compiled_ouput_path.display());
+    println!("cargo:rustc-link-lib={}={}", "static", KEYSTONE_LIB);
 }
 
-fn generate_binding(out_dir_path: &path::Path) {
-    let ks_path = {
-        let path = path::PathBuf::from(KEYSTONE_C);
-        if !path.exists() {
-            panic!("Keystone source directory does not exist");
-        }
-        path
-    };
-
+fn generate_binding(out_dir_path: &path::Path, ks_path: &path::Path) {
     let ks_header_path = {
         let path = ks_path.join("include").join("keystone").join("keystone.h");
         if !path.exists() {
@@ -68,14 +48,17 @@ fn main() {
         path::PathBuf::from(out_dir)
     };
 
-    #[cfg(target_os = "windows")]
-    build_keystone(&out_dir_path);
+    let ks_path = {
+        let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = path::PathBuf::from(&crate_dir).join(KEYSTONE_C);
+        if !path.exists() {
+            panic!("Cannot found Keystone source directory");
+        }
+        path
+    };
 
-    #[cfg(target_os = "linux")]
-    pkg_config::Config::new()
-        .atleast_version("0.9")
-        .probe("keystone")
-        .unwrap_or_else(|_| panic!("Cannot probe Keystone library"));
+    println!("cargo:rerun-if-changed={}", KEYSTONE_C);
 
-    generate_binding(&out_dir_path);
+    generate_binding(&out_dir_path, &ks_path);
+    build_keystone();
 }

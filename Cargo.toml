@@ -3,6 +3,7 @@ name = "keystone"
 version = "0.1.0"
 authors = ["Ta Thanh Dinh <tathanhdinh@gmail.com>"]
 description = "High-level bindings for Keystone assembler"
+edition = "2018"
 
 [dependencies]
 keystone-sys = { path = "keystone-sys" }

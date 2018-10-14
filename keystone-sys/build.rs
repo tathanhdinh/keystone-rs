@@ -5,7 +5,8 @@ static KEYSTONE_LIB: &'static str = "keystone";
 
 fn build_keystone() {
     let mut cmake_config = cmake::Config::new(KEYSTONE_C);
-    cmake_config.define("BUILD_SHARED_LIBS", "OFF")
+    cmake_config
+        .define("BUILD_SHARED_LIBS", "OFF")
         .define("CMAKE_BUILD_TYPE", "Release");
 
     #[cfg(target_family = "windows")]
@@ -16,8 +17,15 @@ fn build_keystone() {
 
     let compiled_ouput_path = cmake_config.build();
 
-    println!("cargo:rustc-link-search={}={}/lib64", "native", compiled_ouput_path.display());
+    println!(
+        "cargo:rustc-link-search={}={}/lib64",
+        "native",
+        compiled_ouput_path.display()
+    );
     println!("cargo:rustc-link-lib={}={}", "static", KEYSTONE_LIB);
+
+    #[cfg(target_family = "unix")]
+    println!("cargo:rustc-link-lib=dylib=stdc++");
 }
 
 fn generate_binding(out_dir_path: &path::Path, ks_path: &path::Path) {

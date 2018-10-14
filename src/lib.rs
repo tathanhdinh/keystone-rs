@@ -3,8 +3,15 @@ use keystone_sys as kss;
 mod reexport;
 
 pub use crate::reexport::*;
-use std::{convert::From, error, ffi::CStr, fmt};
-
+use std::{
+    convert::From,
+    error,
+    ffi::{CStr, CString},
+    fmt,
+    os::raw,
+    ptr, slice,
+    borrow,
+};
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -27,13 +34,14 @@ impl error::Error for Error {
     }
 }
 
-pub struct Assembly {
+pub struct Assembly<'a> {
     pub statement_count: usize,
-    pub encoding: Vec<u8>,
+    // pub encoding: Vec<u8>,
+    pub encoding: borrow::Cow<'a, [u8]>,
 }
 
-impl std::fmt::Display for Assembly {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<'a> fmt::Display for Assembly<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let encoding_strs = self
             .encoding
             .iter()
@@ -55,7 +63,7 @@ impl Keystone {
         if (major, minor) != Keystone::binding_version() {
             Err(Error::Version)
         } else {
-            let mut engine: *mut kss::Engine = std::ptr::null_mut();
+            let mut engine: *mut kss::Engine = ptr::null_mut();
             let err = unsafe {
                 kss::ks_open(
                     From::from(arch),
@@ -99,11 +107,16 @@ impl Keystone {
     }
 
     pub fn asm(&self, str_: &str, address: u64) -> Result<Assembly, Error> {
-        let mut encoding: *mut std::os::raw::c_uchar = std::ptr::null_mut();
+        let mut encoding: *mut raw::c_uchar = ptr::null_mut();
         let mut encoding_size: usize = 0;
         let mut stat_count: usize = 0;
 
-        let s = std::ffi::CString::new(str_).unwrap();
+        let s = {
+            match CString::new(str_) {
+                Ok(s) => s,
+                Err(err) => CString::new(&str_[0..err.nul_position()]).unwrap(),
+            }
+        };
         let err = kss::Error::from(unsafe {
             kss::ks_asm(
                 self.engine,
@@ -116,18 +129,20 @@ impl Keystone {
         } as u32);
 
         if err == kss::Error::KS_ERR_OK {
-            let bytes = unsafe { std::slice::from_raw_parts(encoding, encoding_size) };
+            let bytes = unsafe { slice::from_raw_parts(encoding, encoding_size) };
 
-            let ok = Assembly {
+            let asm = Assembly {
                 statement_count: stat_count,
-                encoding: From::from(&bytes[..]), // copy
+                // encoding: From::from(&bytes[..]), // copy
+                // encoding: bytes.to_vec(), // copy
+                encoding: borrow::Cow::Owned(bytes.to_vec()),
             };
 
             unsafe {
                 kss::ks_free(encoding);
             };
 
-            Ok(ok)
+            Ok(asm)
         } else {
             let err = unsafe { kss::ks_errno(self.engine) };
             Err(From::from(err))
@@ -167,10 +182,15 @@ mod tests {
 
     #[test]
     fn test_amd64() {
-        let engine = Keystone::new(Arch::X86, Mode::Bit64).unwrap();
+        use super::borrow::Borrow;
+
+        let engine = Keystone::new(Arch::X86, Mode::Bit64);
+        assert!(engine.is_ok());
+
+        let engine = engine.unwrap();
 
         let asm_result = engine.asm("add rax, rbx", 0x0).unwrap();
-        assert_eq!(asm_result.encoding[..], [0x48, 0x01, 0xd8]);
+        assert_eq!(asm_result.encoding.borrow(), [0x48, 0x01, 0xd8]);
 
         let asm_result = engine.asm("push rbx", 0x0).unwrap();
         assert_eq!(asm_result.encoding[..], [0x53]);
@@ -184,7 +204,10 @@ mod tests {
 
     #[test]
     fn test_x86() {
-        let engine = Keystone::new(Arch::X86, Mode::Bit32).unwrap();
+        let engine = Keystone::new(Arch::X86, Mode::Bit32);
+        assert!(engine.is_ok());
+
+        let engine = engine.unwrap();
 
         let asm_result = engine.asm("xor eax, ebx", 0x0).unwrap();
         assert_eq!(asm_result.encoding[..], [0x31, 0xd8]);

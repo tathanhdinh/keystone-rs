@@ -7,6 +7,7 @@ fn build_keystone() {
     let mut cmake_config = cmake::Config::new(KEYSTONE_C);
     cmake_config
         .define("BUILD_SHARED_LIBS", "OFF")
+        .define("CMAKE_INSTALL_LIBDIR", "lib64")
         .define("CMAKE_BUILD_TYPE", "Release");
 
     #[cfg(target_family = "windows")]

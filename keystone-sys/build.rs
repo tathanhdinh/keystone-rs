@@ -25,7 +25,10 @@ fn build_keystone() {
     );
     println!("cargo:rustc-link-lib={}={}", "static", KEYSTONE_LIB);
 
-    #[cfg(target_family = "unix")]
+    #[cfg(target_os = "macos")]
+    println!("cargo:rustc-link-lib=dylib=c++");
+
+    #[cfg(all(unix, not(target_os = "macos")))]
     println!("cargo:rustc-link-lib=dylib=stdc++");
 }
 

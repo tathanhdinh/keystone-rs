@@ -4,17 +4,16 @@ Yet another Rust binding for [Keystone](http://www.keystone-engine.org/) assembl
 
 ## Features
  - Hierarchical architecture: low-level binding is done by [keystone-sys](keystone-sys)
- - Fully wrapped and reexported types: no more low-level stuffs :)
- - Windows support, yeah!!!
+ - Fully wrapped and reexported types: no more low-level stuffs
+ - Zero-copy: no additional memory allocation
+ - Windows support
 
 ## Sample
 ```rust
-extern crate keystone;
-
 use keystone::*;
 
 fn main() {
-    let engine = Keystone::new(Arch::X86, Mode::Bit32)
+    let engine = Keystone::from(Arch::X86, Mode::Bit32)
         .expect("Unable to initialize Keystone engine");
 
     engine.option(OptionType::Syntax, OptionValue::SyntaxNasm)
@@ -26,6 +25,9 @@ fn main() {
     println!("{}", asm);
 }
 ```
+
+## Contributors
+ - [@mteyssier](https://github.com/mteyssier)
 
 ## Acknowledgments
  - Remco Verhoef (@remco_verhoef) for the [original work](https://github.com/keystone-engine/keystone/tree/master/bindings/rust)

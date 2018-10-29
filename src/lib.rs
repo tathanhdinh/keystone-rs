@@ -41,7 +41,7 @@ pub struct Assembly {
 }
 
 impl Assembly {
-    fn encoding(&self) -> &[u8] {
+    pub fn encoding(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(self.encoding, self.encoding_size) }
     }
 }

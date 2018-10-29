@@ -28,6 +28,7 @@ fn main() {
 
 ## Contributors
  - [@mteyssier](https://github.com/mteyssier)
+ - [@Bobo1239](https://github.com/Bobo1239)
 
 ## Acknowledgments
  - Remco Verhoef (@remco_verhoef) for the [original work](https://github.com/keystone-engine/keystone/tree/master/bindings/rust)

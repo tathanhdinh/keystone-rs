@@ -2,12 +2,13 @@ use std::{env, path};
 
 static KEYSTONE_C: &'static str = "keystone-c";
 static KEYSTONE_LIB: &'static str = "keystone";
+static INSTALL_LIB_DIR: &'static str = "lib";
 
 fn build_keystone() {
     let mut cmake_config = cmake::Config::new(KEYSTONE_C);
     cmake_config
         .define("BUILD_SHARED_LIBS", "OFF")
-        .define("CMAKE_INSTALL_LIBDIR", "lib64")
+        .define("CMAKE_INSTALL_LIBDIR", INSTALL_LIB_DIR)
         .define("CMAKE_BUILD_TYPE", "Release");
 
     #[cfg(target_family = "windows")]
@@ -19,9 +20,10 @@ fn build_keystone() {
     let compiled_ouput_path = cmake_config.build();
 
     println!(
-        "cargo:rustc-link-search={}={}/lib64",
+        "cargo:rustc-link-search={}={}/{}",
         "native",
-        compiled_ouput_path.display()
+        compiled_ouput_path.display(),
+        INSTALL_LIB_DIR
     );
     println!("cargo:rustc-link-lib={}={}", "static", KEYSTONE_LIB);
 

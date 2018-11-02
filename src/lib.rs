@@ -4,14 +4,15 @@ mod reexport;
 
 pub use crate::reexport::*;
 use std::{
-    convert::From,
     error,
     ffi::{CStr, CString},
-    fmt,
+    fmt::{self, Display, Formatter},
+    marker::PhantomData,
     os::raw,
-    ptr, slice,
-    fmt::{Display, Formatter},
+    ptr, result, slice,
 };
+
+type Result<T> = result::Result<T, Error>;
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -34,30 +35,32 @@ impl error::Error for Error {
     }
 }
 
-pub struct Assembly {
+// ref: https://stackoverflow.com/questions/41533508/what-is-the-phantomdata-actually-doing-in-the-implementation-of-vec
+// PhantomData<'a u8> notifies the compiler that Assembly may own instances of u8!? (NO)
+pub struct Assembly<'a> {
     pub statement_count: usize,
-    encoding_size: usize,
-    encoding: *mut raw::c_uchar,
+    phantom: PhantomData<&'a u8>,
+    inner_encoding: &'a [u8],
 }
 
-impl Assembly {
+impl<'a> Assembly<'a> {
     pub fn encoding(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.encoding, self.encoding_size) }
+        self.inner_encoding
     }
 }
 
-impl Drop for Assembly {
+impl<'a> Drop for Assembly<'a> {
     fn drop(&mut self) {
         unsafe {
-            kss::ks_free(self.encoding);
+            kss::ks_free(self.inner_encoding.as_ptr() as *mut u8)
         };
     }
 }
 
-impl Display for Assembly {
+impl<'a> Display for Assembly<'a> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let encoding_strs = self
-            .encoding()
+            .inner_encoding
             .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<Vec<_>>()
@@ -72,7 +75,7 @@ pub struct Keystone {
 
 impl Keystone {
     /// Create new instance of Keystone engine.
-    pub fn from(arch: Arch, mode: Mode) -> Result<Self, Error> {
+    pub fn from(arch: Arch, mode: Mode) -> Result<Self> {
         let (major, minor, _) = self::version();
         if (major, minor) != Keystone::binding_version() {
             Err(Error::Version)
@@ -94,7 +97,7 @@ impl Keystone {
         }
     }
 
-    pub fn error(&self) -> Result<(), Error> {
+    pub fn error(&self) -> Result<()> {
         let err = unsafe { kss::ks_errno(self.engine) };
 
         if err == kss::Error::KS_ERR_OK {
@@ -104,7 +107,7 @@ impl Keystone {
         }
     }
 
-    pub fn option(&self, type_: OptionType, value: OptionValue) -> Result<(), Error> {
+    pub fn option(&self, type_: OptionType, value: OptionValue) -> Result<()> {
         let err = unsafe {
             kss::ks_option(
                 self.engine,
@@ -120,8 +123,8 @@ impl Keystone {
         }
     }
 
-    pub fn asm(&self, str_: &str, address: u64) -> Result<Assembly, Error> {
-        let mut encoding: *mut raw::c_uchar = ptr::null_mut();
+    pub fn asm<'b>(&self, str_: &'b str, address: u64) -> Result<Assembly> {
+        let mut raw_encoding: *mut raw::c_uchar = ptr::null_mut();
         let mut encoding_size: usize = 0;
         let mut statement_count: usize = 0;
 
@@ -136,7 +139,7 @@ impl Keystone {
                 self.engine,
                 s.as_ptr(),
                 address,
-                &mut encoding,
+                &mut raw_encoding,
                 &mut encoding_size,
                 &mut statement_count,
             )
@@ -145,8 +148,8 @@ impl Keystone {
         if err == kss::Error::KS_ERR_OK {
             Ok(Assembly {
                 statement_count,
-                encoding,
-                encoding_size,
+                phantom: PhantomData,
+                inner_encoding: unsafe { slice::from_raw_parts(raw_encoding, encoding_size) },
             })
         } else {
             let err = unsafe { kss::ks_errno(self.engine) };
@@ -201,8 +204,14 @@ mod tests {
         let asm_result = engine.asm("lea rcx, [r12+r9*1-0x01]", 0x0).unwrap();
         assert_eq!(asm_result.encoding(), [0x4b, 0x8d, 0x4c, 0x0c, 0xff]);
 
-        let asm_result = engine.asm("lea rbx, dword ptr [r9+rax*1]", 0x0).unwrap();
-        assert_eq!(asm_result.encoding(), [0x49, 0x8d, 0x1c, 0x01]);
+        // this will not compile
+        // let encoding;
+        // {
+        //     let asm_result = engine.asm("lea rbx, dword ptr [r9+rax*1]", 0x0).unwrap();
+        //     encoding = asm_result.encoding();
+        // }
+        // assert_eq!(encoding, [0x49, 0x8d, 0x1c, 0x01]);
+
     }
 
     #[test]
